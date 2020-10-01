@@ -4,7 +4,7 @@
   "description": "pg-promise-github-test",
   "main": "index.js",
   "scripts": {
-    "test": "node ./node_modules/ts-node/dist/bin.js server.ts"
+    "test": "node ./node_modules/ts-node/dist/bin.js server.ts dmsapereira"
   },
   "keywords": [
     "github",

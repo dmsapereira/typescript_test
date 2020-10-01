@@ -46,15 +46,18 @@ interface GithubUsers
 const pgp = pgPromise(pgpDefaultConfig);
 const db = pgp(options);
 
+let githubUser = process.argv[2];
+
 db.none('CREATE TABLE github_users (id BIGSERIAL, login TEXT, name TEXT, company TEXT)')
+.catch((error) => console.log(error))
 .then(() => request({
-  uri: 'https://api.github.com/users/gaearon',
+  uri: `https://api.github.com/users/${githubUser}`,
   headers: {
         'User-Agent': 'Request-Promise'
     },
   json: true
-}))
-.then((data: GithubUsers) => db.one(
-  'INSERT INTO github_users (login) VALUES ($[login]) RETURNING id', data)
+  })
+).then((data: GithubUsers) => db.one(
+  'INSERT INTO github_users (login, name, company) VALUES ($[login], $[name], $[company]) RETURNING id', data)
 ).then(({id}) => console.log(id))
 .then(() => process.exit(0));
