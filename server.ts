@@ -2,7 +2,6 @@ const pgPromise = require('pg-promise');
 const R         = require('ramda');
 const request   = require('request-promise');
 
-const LIST_FLAG = "-l";
 const LISBON_FLAG = "-L";
 
 // Limit the amount of debugging of SQL expressions
@@ -69,7 +68,7 @@ function printUserInfo(data : GithubUser, lisbonMaskFlag : boolean){
   Login: ${data.login}; 
   Name: ${data.name}; 
   Company: ${data.company}; 
-  Location: ${lisbonMaskFlag ? data.location : "Lisbon"};
+  Location: ${lisbonMaskFlag ? "Lisbon" : data.location};
   E-Mail: ${data.email};
   Followers: ${data.followers};
   Following: ${data.following}`);
@@ -113,8 +112,8 @@ async function listLocationStatistics(){
 
 //Github Functions
 
-async function getGithubUser(login : String){
-  return await request({
+function getGithubUser(login : String){
+  return request({
     uri: `https://api.github.com/users/${login}`,
     headers: {
       'User-Agent': 'Request-Promise'
@@ -124,29 +123,20 @@ async function getGithubUser(login : String){
 }
 
 //"Main"
-async function dbOperation(login : String, listFlag : boolean, lisbonMaskFlag : boolean){
-    await createUsersTable();
-    if(await duplicateUser(login)){
-      let userData = undefined;
-      try{
-        userData = await getGithubUser(login);
-      }catch(error){
-        console.error("User does not exist on Github"); 
-        process.exit(0);
-      }
-        await addUser(userData);
-    }else{
-      console.error("User already exists in the database");
-    }
-
-    if(listFlag){
-      await listUsers(lisbonMaskFlag);
-    }
-
-    await listLocationStatistics();
-
-    process.exit(0);
+function dbOperation(login : String, lisbonMaskFlag : boolean){
+    console.log(lisbonMaskFlag);
+    
+    createUsersTable().
+    then(() => duplicateUser(login))
+    .then((hasDuplicate: boolean) => {
+      if(hasDuplicate)
+        throw new Error('User Already Exists!')
+    })
+    .then(() => getGithubUser(login))
+    .then((userData : GithubUser) => addUser(userData))
+    .then(() => listUsers(lisbonMaskFlag))
+    .then(listLocationStatistics)
+    .catch((error) => console.log(error.message));
 }
 
-
-dbOperation(process.argv[2], process.argv.includes(LIST_FLAG), process.argv.includes(LISBON_FLAG));
+dbOperation(process.argv[2], process.argv.includes(LISBON_FLAG));
