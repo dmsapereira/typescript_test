@@ -92,7 +92,7 @@ async function addUser(data : GithubUser){
 
 async function duplicateUser(login : String){
   try{
-    let row = await db.one(`SELECT 1 FROM github_users WHERE login = ${login}`);
+    await db.one(`SELECT 1 FROM github_users WHERE login = ${login}`);
   }catch(error){
     return false;
   }
@@ -124,8 +124,6 @@ function getGithubUser(login : String){
 
 //"Main"
 function dbOperation(login : String, lisbonMaskFlag : boolean){
-    console.log(lisbonMaskFlag);
-    
     createUsersTable().
     then(() => duplicateUser(login))
     .then((hasDuplicate: boolean) => {
@@ -136,6 +134,7 @@ function dbOperation(login : String, lisbonMaskFlag : boolean){
     .then((userData : GithubUser) => addUser(userData))
     .then(() => listUsers(lisbonMaskFlag))
     .then(listLocationStatistics)
+    .then(() => process.exit(0))
     .catch((error) => console.log(error.message));
 }
 
