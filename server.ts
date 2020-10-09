@@ -61,6 +61,8 @@ interface LocationStatistic{
 const pgp = pgPromise(pgpDefaultConfig);
 const db = pgp(options);
 
+const QueryResultError = pgp.errors.QueryResultError;
+
 //Printing functions
 function printUserInfo(data : GithubUser, lisbonMaskFlag : boolean){
   console.info(`
@@ -78,64 +80,42 @@ function printLocationStats(data : LocationStatistic){
   console.info(`Location: ${data.location}; Population: ${data.population}`);
 }
 
-//Database(Postgres) Functions
-
-async function createUsersTable(){
-  await db.none('CREATE TABLE github_users (id BIGSERIAL, login TEXT, name TEXT, company TEXT, location TEXT, email TEXT, followers INT, following INT)')
-    .catch(() => console.log("Table already exists"))
-}
-
-
-async function addUser(data : GithubUser){
-  await db.one('INSERT INTO github_users VALUES ($[id], $[login], $[name], $[company], $[location], $[email], $[followers], $[following]) RETURNING id', data);
-}
-
-async function duplicateUser(login : String){
-  try{
-    await db.one(`SELECT 1 FROM github_users WHERE login = ${login}`);
-  }catch(error){
-    return false;
-  }
-
-  return true;
-}
-
-async function listUsers(lisbonMaskFlag : boolean){
-  console.info("USERS")
-  await db.each('SELECT * FROM github_users',null, (data : GithubUser) => printUserInfo(data, lisbonMaskFlag));
-}
-
-async function listLocationStatistics(){
-  console.info("LOCATION STATISTICS")
-  await db.each('SELECT COUNT(*) AS population, location FROM github_users GROUP BY location',null, printLocationStats);
-}
-
-//Github Functions
-
-function getGithubUser(login : String){
-  return request({
-    uri: `https://api.github.com/users/${login}`,
-    headers: {
-      'User-Agent': 'Request-Promise'
-    },
-    json: true
-  });
-}
-
 //"Main"
 function dbOperation(login : String, lisbonMaskFlag : boolean){
-    createUsersTable().
-    then(() => duplicateUser(login))
-    .then((hasDuplicate: boolean) => {
-      if(hasDuplicate)
+    db.none('CREATE TABLE github_users (id BIGSERIAL, login TEXT, name TEXT, company TEXT, location TEXT, email TEXT, followers INT, following INT)')
+    .then(() => //check for a duplicate user
+        db.one(`SELECT 1 FROM github_users WHERE login = '${login}'`)
+        .then(() => true)
+        .catch(() => false)
+    , () => 
+      db.one(`SELECT 1 FROM github_users WHERE login = '${login}'`)
+        .then(() => true)// this disgrace is here because we want to procceed even if the table already exists
+        .catch(() => false)
+    )
+    .then((hasDuplicate: boolean) => {      
+      if(hasDuplicate){
         throw new Error('User Already Exists!')
-    })
-    .then(() => getGithubUser(login))
-    .then((userData : GithubUser) => addUser(userData))
-    .then(() => listUsers(lisbonMaskFlag))
-    .then(listLocationStatistics)
-    .then(() => process.exit(0))
-    .catch((error) => console.log(error.message));
+      }
+    })//get the user data from Github
+    .then(() => request({
+      uri: `https://api.github.com/users/${login}`,
+      headers: {
+        'User-Agent': 'Request-Promise'
+      },
+      json: true
+    }))//Insert the user
+    .then((userData : GithubUser) => 
+        db.one('INSERT INTO github_users VALUES ($[id], $[login], $[name], $[company], $[location], $[email], $[followers], $[following]) RETURNING id', userData))
+    .then(() => //Print the users
+        db.each('SELECT * FROM github_users',null, (data : GithubUser) => printUserInfo(data, lisbonMaskFlag)))
+    .then(() => //Print the location statistics
+        db.each('SELECT COUNT(*) AS population, location FROM github_users GROUP BY location',null, printLocationStats))
+    .then(() => 
+        process.exit(0))
+    .catch((error : Error) => {
+        console.log(error.message)
+        process.exit(0);
+    });
 }
 
 dbOperation(process.argv[2], process.argv.includes(LISBON_FLAG));
